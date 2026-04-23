@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>群友行程日历</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 10px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .header {
+      background: #07c160;
+      color: white;
+      padding: 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .header h1 { font-size: 18px; font-weight: 600; }
+    .header .room-tag {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+    .calendar-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: white;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .calendar-nav button {
+      background: #07c160;
+      color: white;
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .calendar-nav .month-year {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    .weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .weekdays div {
+      text-align: center;
+      font-size: 12px;
+      color: #999;
+      padding: 8px 0;
+    }
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .day {
+      background: white;
+      border-radius: 8px;
+      min-height: 64px;
+      padding: 4px;
+      position: relative;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .day:active { transform: scale(0.95); }
+    .day.other-month { background: #fafafa; color: #ccc; }
+    .day.today { background: #e8f5e9; }
+    .day-number {
+      font-size: 13px;
+      font-weight: 500;
+      color: #333;
+    }
+    .day.today .day-number { color: #07c160; font-weight: 700; }
+    .event-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #07c160;
+      display: inline-block;
+      margin: 1px;
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: flex-end;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: white;
+      width: 100%;
+      max-width: 480px;
+      border-radius: 20px 20px 0 0;
+      padding: 20px;
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .modal h3 {
+      font-size: 16px;
+      margin-bottom: 16px;
+      color: #333;
+    }
+    .modal input, .modal textarea {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      -webkit-appearance: none;
+    }
+    .modal textarea { min-height: 80px; resize: none; }
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .modal-buttons button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    .btn-cancel { background: #f5f5f5; color: #666; }
+    .btn-submit { background: #07c160; color: white; }
+    .event-list { margin-top: 12px; }
+    .event-item {
+      background: white;
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .event-info .event-name {
+      font-size: 13px;
+      color: #07c160;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .event-info .event-content {
+      font-size: 14px;
+      color: #333;
+    }
+    .event-info .event-date {
+      font-size: 11px;
+      color: #999;
+      margin-top: 4px;
+    }
+    .event-delete {
+      color: #ff4d4f;
+      font-size: 12px;
+      padding: 4px 8px;
+      border: none;
+      background: none;
+      cursor: pointer;
+    }
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #999;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>群友行程日历</h1>
+    <div class="room-tag" id="roomTag">加载中...</div>
+  </div>
+
+  <div class="calendar-nav">
+    <button onclick="changeMonth(-1)">&#8249;</button>
+    <div class="month-year" id="monthYear"></div>
+    <button onclick="changeMonth(1)">&#8250;</button>
+  </div>
+
+  <div class="weekdays">
+    <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+  </div>
+
+  <div class="days" id="days"></div>
+
+  <div style="margin-top: 16px; margin-bottom: 8px; font-size: 14px; color: #666; font-weight: 500;">
+    本月行程
+  </div>
+  <div class="event-list" id="eventList">
+    <div class="loading">加载中...</div>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h3 id="modalTitle">添加行程</h3>
+      <input type="text" id="inputName" placeholder="你的昵称" maxlength="10">
+      <textarea id="inputContent" placeholder="行程内容，例如：出差北京、休假、团建..."></textarea>
+      <div class="modal-buttons">
+        <button class="btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn-submit" onclick="submitEvent()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==================== 配置 ====================
+    // 部署后替换为你的 Cloudflare Worker 地址
+    const API_BASE = "https://group-calendar-api.sonic85625.workers.dev";
+
+    // 从 URL 获取房间 ID，没有则默认为 "default"
+    const urlParams = new URLSearchParams(window.location.search);
+    const ROOM = urlParams.get("room") || "default";
+
+    // ==================== 状态 ====================
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth();
+    let selectedDate = null;
+    let events = [];
+
+    // ==================== 日历渲染 ====================
+    function renderCalendar() {
+      const year = currentYear;
+      const month = currentMonth;
+      document.getElementById("monthYear").textContent = `${year}年${month + 1}月`;
+      document.getElementById("roomTag").textContent = `群组: ${ROOM}`;
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+      const daysEl = document.getElementById("days");
+      daysEl.innerHTML = "";
+
+      // 上月补位
+      for (let i = firstDay - 1; i >= 0; i--) {
+        const day = daysInPrevMonth - i;
+        const el = createDayEl(day, true);
+        daysEl.appendChild(el);
+      }
+
+      // 当月
+      const today = new Date();
+      for (let d = 1; d <= daysInMonth; d++) {
+        const isToday = year === today.getFullYear() && month === today.getMonth() && d === today.getDate();
+        const el = createDayEl(d, false, isToday);
+
+        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const dayEvents = events.filter(e => e.date === dateStr);
+        if (dayEvents.length > 0) {
+          const dots = document.createElement("div");
+          dots.style.marginTop = "2px";
+          dayEvents.slice(0, 3).forEach(() => {
+            dots.appendChild(document.createElement("span")).className = "event-dot";
+          });
+          el.appendChild(dots);
+        }
+
+        el.onclick = () => openModal(dateStr);
+        daysEl.appendChild(el);
+      }
+
+      // 下月补位
+      const totalCells = firstDay + daysInMonth;
+      const remaining = (7 - (totalCells % 7)) % 7;
+      for (let d = 1; d <= remaining; d++) {
+        const el = createDayEl(d, true);
+        daysEl.appendChild(el);
+      }
+
+      renderEventList();
+    }
+
+    function createDayEl(day, otherMonth, isToday) {
+      const el = document.createElement("div");
+      el.className = "day" + (otherMonth ? " other-month" : "") + (isToday ? " today" : "");
+      el.innerHTML = `<div class="day-number">${day}</div>`;
+      return el;
+    }
+
+    function changeMonth(delta) {
+      currentMonth += delta;
+      if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      renderCalendar();
+    }
+
+    // ==================== 事件列表 ====================
+    function renderEventList() {
+      const listEl = document.getElementById("eventList");
+      const monthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+      const monthEvents = events
+        .filter(e => e.date.startsWith(monthStr))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (monthEvents.length === 0) {
+        listEl.innerHTML = `<div class="loading">本月暂无行程，点击日历日期添加</div>`;
+        return;
+      }
+
+      listEl.innerHTML = monthEvents.map(e => `
+        <div class="event-item">
+          <div class="event-info">
+            <div class="event-name">${escapeHtml(e.name)}</div>
+            <div class="event-content">${escapeHtml(e.content)}</div>
+            <div class="event-date">${e.date}</div>
+          </div>
+          <button class="event-delete" onclick="deleteEvent('${e.id}')">删除</button>
+        </div>
+      `).join("");
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ==================== 模态框 ====================
+    function openModal(dateStr) {
+      selectedDate = dateStr;
+      document.getElementById("modalTitle").textContent = `添加行程 - ${dateStr}`;
+      document.getElementById("inputName").value = "";
+      document.getElementById("inputContent").value = "";
+      document.getElementById("modal").classList.add("active");
+    }
+
+    function closeModal() {
+      document.getElementById("modal").classList.remove("active");
+    }
+
+    async function submitEvent() {
+      const name = document.getElementById("inputName").value.trim();
+      const content = document.getElementById("inputContent").value.trim();
+      if (!name || !content) {
+        alert("请填写昵称和行程内容");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/events?room=${ROOM}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, date: selectedDate, content })
+        });
+        if (res.ok) {
+          closeModal();
+          await loadEvents();
+        } else {
+          alert("添加失败，请检查网络");
+        }
+      } catch (err) {
+        alert("网络错误，请检查 API 地址配置");
+      }
+    }
+
+    async function deleteEvent(id) {
+      if (!confirm("确定删除这条行程吗？")) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/events?room=${ROOM}&id=${id}`, {
+          method: "DELETE"
+        });
+        if (res.ok) {
+          await loadEvents();
+        } else {
+          alert("删除失败");
+        }
+      } catch (err) {
+        alert("网络错误");
+      }
+    }
+
+    // ==================== 数据加载 ====================
+    async function loadEvents() {
+      try {
+        const res = await fetch(`${API_BASE}/api/events?room=${ROOM}`);
+        events = await res.json();
+        renderCalendar();
+      } catch (err) {
+        document.getElementById("eventList").innerHTML =
+          `<div class="loading">加载失败，请检查 API 地址配置<br>当前: ${API_BASE}</div>`;
+      }
+    }
+
+    // 点击遮罩关闭
+    document.getElementById("modal").addEventListener("click", (e) => {
+      if (e.target.id === "modal") closeModal();
+    });
+
+    // 初始化
+    loadEvents();
+  </script>
+</body>
+</html>
