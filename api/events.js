@@ -1,5 +1,13 @@
 // Vercel Serverless Function - 群友行程日历 API
-// 部署方式：推送到 GitHub，在 Vercel 导入仓库自动部署
+// 使用 Upstash Redis (通过 @vercel/kv 兼容层)
+
+import { createClient } from "@vercel/kv";
+
+// 创建 KV 客户端，自动读取 Vercel 注入的环境变量
+const kv = createClient({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
 export default async function handler(req, res) {
   // CORS 头
@@ -17,10 +25,11 @@ export default async function handler(req, res) {
   // GET - 获取行程列表
   if (req.method === "GET") {
     try {
-      const data = await getKVData(key);
+      const data = await kv.get(key);
       const events = data ? JSON.parse(data) : [];
       return res.status(200).json(events);
     } catch (err) {
+      console.error("GET error:", err);
       return res.status(500).json({ error: "Failed to fetch events" });
     }
   }
@@ -29,7 +38,7 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     try {
       const { name, date, content } = req.body;
-      const data = await getKVData(key);
+      const data = await kv.get(key);
       const events = data ? JSON.parse(data) : [];
 
       const newEvent = {
@@ -41,10 +50,11 @@ export default async function handler(req, res) {
       };
 
       events.push(newEvent);
-      await setKVData(key, JSON.stringify(events));
+      await kv.set(key, JSON.stringify(events));
 
       return res.status(200).json(newEvent);
     } catch (err) {
+      console.error("POST error:", err);
       return res.status(500).json({ error: "Failed to add event" });
     }
   }
@@ -52,31 +62,18 @@ export default async function handler(req, res) {
   // DELETE - 删除行程
   if (req.method === "DELETE") {
     try {
-      const data = await getKVData(key);
+      const data = await kv.get(key);
       let events = data ? JSON.parse(data) : [];
 
       events = events.filter((e) => e.id !== id);
-      await setKVData(key, JSON.stringify(events));
+      await kv.set(key, JSON.stringify(events));
 
       return res.status(200).json({ success: true });
     } catch (err) {
+      console.error("DELETE error:", err);
       return res.status(500).json({ error: "Failed to delete event" });
     }
   }
 
   return res.status(405).json({ error: "Method Not Allowed" });
-}
-
-// 使用 Vercel KV 存储数据
-// 注意：需要在 Vercel 控制台绑定 KV 存储
-async function getKVData(key) {
-  // 这里使用 Vercel KV 的 API
-  // 实际部署时需要在 Vercel 控制台配置 KV 绑定
-  const { kv } = await import("@vercel/kv");
-  return kv.get(key);
-}
-
-async function setKVData(key, value) {
-  const { kv } = await import("@vercel/kv");
-  return kv.set(key, value);
 }
